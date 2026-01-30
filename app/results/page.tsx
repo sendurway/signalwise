@@ -106,7 +106,14 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
 
 function withTracking(
   baseLink: string,
-  ctx: { homeZip: string; dataTier: string; priority: string; source: string; currentBill?: string; currentCarrier?: string }
+  ctx: {
+    homeZip: string;
+    dataTier: string;
+    priority: string;
+    source: string;
+    currentBill?: string;
+    currentCarrier?: string;
+  }
 ) {
   const qs = new URLSearchParams();
   qs.set("homeZip", ctx.homeZip);
@@ -175,6 +182,9 @@ export default async function ResultsPage({
     `Network fit for your ZIP: ${homeZip || "(missing)"}`,
   ];
 
+  const primaryCta =
+    savings !== null ? `Switch & Save $${savings}/mo` : "Switch (Recommended)";
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-gray-100">
       <div className="mx-auto max-w-4xl px-6 py-12">
@@ -184,9 +194,11 @@ export default async function ResultsPage({
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-gray-200">
               SignalWise
             </div>
+
             <h1 className="text-4xl font-semibold tracking-tight">Your results</h1>
-            <p className="text-sm text-gray-300">
-              Best Match is highlighted. Cheapest and Coverage are still available below.
+
+            <p className="text-xs text-gray-400">
+              Recommendations are generated from your inputs and known carrier characteristics. We don’t accept paid placement.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -211,11 +223,11 @@ export default async function ResultsPage({
         </div>
 
         {/* HERO */}
-        <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
+        <div className="mt-8 rounded-3xl border border-white/15 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.06)] backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-black">
-                Best Match
+                Best Match • Recommended for you
               </div>
 
               <div className="flex items-center gap-4">
@@ -229,6 +241,9 @@ export default async function ResultsPage({
               <p className="text-sm text-gray-200">{rec.bestMatch.reason}</p>
 
               <div className="grid gap-2 text-sm text-gray-200">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Why this was chosen
+                </div>
                 {why.map((w) => (
                   <Bullet key={w} text={w} />
                 ))}
@@ -241,7 +256,7 @@ export default async function ResultsPage({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-5 text-center md:w-60">
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-5 text-center md:w-64">
               <p className="text-xs text-gray-400">Est. monthly</p>
               <p className="mt-1 text-3xl font-semibold">{rec.bestMatch.price}</p>
 
@@ -254,17 +269,23 @@ export default async function ResultsPage({
                 href={withTracking(rec.bestMatch.link, { ...ctxBase, source: "results" })}
                 className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black hover:opacity-90"
               >
-                Switch Now
+                {primaryCta}
               </a>
 
               <p className="mt-2 text-xs text-gray-500">Official carrier site</p>
+              <p className="mt-1 text-xs text-gray-500">Keep your number • ~10 min</p>
             </div>
           </div>
+
+          <p className="mt-6 text-xs text-gray-400">
+            Disclosure: We may earn a commission if you switch through our links. This does not affect recommendations.
+          </p>
         </div>
 
-        {/* SECONDARY */}
+        {/* SECONDARY (de-emphasized) */}
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <ResultCard
+            tone="secondary"
             title="Cheapest Option"
             subtitle="Lowest monthly cost for your selection"
             item={rec.cheapest}
@@ -277,6 +298,7 @@ export default async function ResultsPage({
           />
 
           <ResultCard
+            tone="secondary"
             title="Best Coverage (Estimate)"
             subtitle="Reliability-first recommendation"
             item={rec.bestCoverage}
@@ -288,11 +310,6 @@ export default async function ResultsPage({
             href={withTracking(rec.bestCoverage.link, { ...ctxBase, source: "coverage_card" })}
           />
         </div>
-
-        <p className="mt-8 text-xs text-gray-400">
-          Disclosure: We may earn a commission if you switch through our links. This does not affect
-          recommendations.
-        </p>
       </div>
     </main>
   );
@@ -312,15 +329,17 @@ function ResultCard({
   item,
   bullets,
   href,
+  tone,
 }: {
   title: string;
   subtitle: string;
   item: Recommendation;
   bullets: string[];
   href: string;
+  tone: "secondary";
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-90 hover:opacity-100 transition">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
@@ -356,7 +375,7 @@ function ResultCard({
         href={href}
         className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/15"
       >
-        Switch Now
+        Switch
       </a>
 
       <p className="mt-2 text-xs text-gray-500">Official carrier site</p>

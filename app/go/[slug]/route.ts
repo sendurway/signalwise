@@ -1,47 +1,56 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { appendFile, mkdir } from "fs/promises";
-import path from "path";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { OUTBOUND_URLS, CarrierSlug } from "@/lib/outbound";
 
-const DESTINATIONS: Record<string, string> = {
-  mint: "https://www.mintmobile.com",
-  visible: "https://www.visible.com",
-  "us-mobile": "https://www.usmobile.com",
-};
-
-export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ slug: string }> }
+) {
   const { slug } = await params;
+  const carrier = slug as CarrierSlug;
+
   const url = new URL(req.url);
 
-  const homeZip = url.searchParams.get("homeZip") ?? "";
-  const dataTier = url.searchParams.get("dataTier") ?? "";
-  const priority = url.searchParams.get("priority") ?? "";
-  const source = url.searchParams.get("source") ?? "";
+  const homeZip = url.searchParams.get("homeZip");
+  const dataTier = url.searchParams.get("dataTier");
+  const priority = url.searchParams.get("priority");
+  const source = url.searchParams.get("source");
 
-  const event = {
-    type: "SWITCH_CLICK",
-    carrier: slug,
-    homeZip,
-    dataTier,
-    priority,
-    source,
-    at: new Date().toISOString(),
-    userAgent: req.headers.get("user-agent") ?? "",
-  };
+  const currentCarrier = url.searchParams.get("currentCarrier");
+  const currentBillRaw = url.searchParams.get("currentBill");
+  const currentBill =
+    currentBillRaw && Number.isFinite(Number(currentBillRaw))
+      ? Number(currentBillRaw)
+      : null;
 
+  const userAgent = req.headers.get("user-agent");
+
+  // Write click to Supabase (non-blocking for redirect)
   try {
-    const dir = path.join(process.cwd(), "data");
-    await mkdir(dir, { recursive: true });
+    const sb = supabaseAdmin();
+    const { error } = await sb.from("clicks").insert({
+      carrier,
+      home_zip: homeZip,
+      data_tier: dataTier,
+      priority,
+      source,
+      current_carrier: currentCarrier,
+      current_bill: currentBill,
+      user_agent: userAgent,
+    });
 
-    const filePath = path.join(dir, "clicks.jsonl");
-    await appendFile(filePath, JSON.stringify(event) + "\n", "utf8");
+    if (error) console.error("[SUPABASE_INSERT_ERROR]", error);
   } catch (err) {
-    console.error("[CLICK_WRITE_FAILED]", err);
+    console.error("[SUPABASE_FAILED]", err);
   }
 
-  console.log("[SWITCH_CLICK]", event);
+  // Resolve outbound URL from config
+  const target =
+    carrier in OUTBOUND_URLS
+      ? OUTBOUND_URLS[carrier]
+      : "https://www.google.com";
 
-  const target = DESTINATIONS[slug] ?? "https://www.google.com";
   return NextResponse.redirect(target, { status: 302 });
 }

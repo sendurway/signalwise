@@ -1,18 +1,18 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { readFile } from "fs/promises";
-import path from "path";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-type ClickEvent = {
-  type: string;
+type ClickRow = {
+  id: string;
+  created_at: string;
   carrier: string;
-  homeZip: string;
-  dataTier: string;
-  priority: string;
-  source: string;
-  at: string;
-  userAgent?: string;
+  home_zip: string | null;
+  data_tier: string | null;
+  priority: string | null;
+  source: string | null;
+  current_carrier: string | null;
+  current_bill: number | null;
 };
 
 function pct(n: number, d: number) {
@@ -21,47 +21,33 @@ function pct(n: number, d: number) {
 }
 
 export default async function ClicksPage() {
-  const filePath = path.join(process.cwd(), "data", "clicks.jsonl");
+  const sb = supabaseAdmin();
 
-  let events: ClickEvent[] = [];
-  try {
-    const content = await readFile(filePath, "utf8");
-    const lines = content.trim().split("\n").filter(Boolean);
-    const last = lines.slice(-500); // keep more events for better summaries
+  const { data, error } = await sb
+    .from("clicks")
+    .select(
+      "id, created_at, carrier, home_zip, data_tier, priority, source, current_carrier, current_bill"
+    )
+    .order("created_at", { ascending: false })
+    .limit(300);
 
-    events = last
-      .map((line) => {
-        try {
-          return JSON.parse(line) as ClickEvent;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean) as ClickEvent[];
-  } catch {
-    // No file yet is fine
-  }
+  const rows: ClickRow[] = data ?? [];
+  const total = rows.length;
 
-  const total = events.length;
-
-  const byCarrier = events.reduce<Record<string, number>>((acc, e) => {
-    acc[e.carrier] = (acc[e.carrier] ?? 0) + 1;
+  const byCarrier = rows.reduce<Record<string, number>>((acc, r) => {
+    acc[r.carrier] = (acc[r.carrier] ?? 0) + 1;
     return acc;
   }, {});
 
-  const bySource = events.reduce<Record<string, number>>((acc, e) => {
-    const key = e.source || "unknown";
-    acc[key] = (acc[key] ?? 0) + 1;
+  const bySource = rows.reduce<Record<string, number>>((acc, r) => {
+    const k = r.source || "unknown";
+    acc[k] = (acc[k] ?? 0) + 1;
     return acc;
   }, {});
 
-  // "results" = Best Match hero CTA in our implementation
   const bestMatchClicks = bySource["results"] ?? 0;
   const cheapestCardClicks = bySource["cheapest_card"] ?? 0;
   const coverageCardClicks = bySource["coverage_card"] ?? 0;
-  const otherClicks = total - (bestMatchClicks + cheapestCardClicks + coverageCardClicks);
-
-  const tableEvents = events.slice(-50).slice().reverse();
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-gray-100">
@@ -73,8 +59,14 @@ export default async function ClicksPage() {
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight">Clicks</h1>
             <p className="mt-2 text-sm text-gray-300">
-              Showing summaries from the last {events.length} recorded switch clicks (local dev file).
+              Showing the last {rows.length} clicks from Supabase.
             </p>
+
+            {error ? (
+              <p className="mt-2 text-sm text-red-300">
+                Error loading clicks: {String(error.message ?? error)}
+              </p>
+            ) : null}
           </div>
 
           <a
@@ -85,72 +77,65 @@ export default async function ClicksPage() {
           </a>
         </div>
 
-        {/* Summary: totals + best match share */}
+        {/* Summary */}
         <div className="mt-6 grid gap-4 lg:grid-cols-4">
-          <StatCard title="Total clicks" value={String(total)} sub="All recorded clicks" />
+          <StatCard title="Total clicks" value={String(total)} sub="Last 300 rows" />
           <StatCard
             title="Best Match share"
             value={pct(bestMatchClicks, total)}
             sub={`${bestMatchClicks} from Best Match CTA`}
           />
           <StatCard
-            title="Cheapest card clicks"
+            title="Cheapest card"
             value={String(cheapestCardClicks)}
             sub={pct(cheapestCardClicks, total)}
           />
           <StatCard
-            title="Coverage card clicks"
+            title="Coverage card"
             value={String(coverageCardClicks)}
             sub={pct(coverageCardClicks, total)}
           />
         </div>
 
-        {/* Breakdown grids */}
+        {/* Breakdowns */}
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {/* By carrier */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-            <div className="text-sm font-semibold">Clicks by carrier</div>
-            <div className="mt-3 grid gap-2">
-              {Object.entries(byCarrier)
-                .sort((a, b) => b[1] - a[1])
-                .map(([carrier, count]) => (
-                  <RowStat
-                    key={carrier}
-                    label={carrier}
-                    value={`${count}`}
-                    meta={pct(count, total)}
-                  />
-                ))}
-              {Object.keys(byCarrier).length === 0 && (
-                <div className="text-sm text-gray-400">No clicks yet.</div>
-              )}
-            </div>
-          </div>
+          <Panel title="Clicks by carrier">
+            {Object.keys(byCarrier).length === 0 ? (
+              <div className="text-sm text-gray-400">No clicks yet.</div>
+            ) : (
+              <div className="grid gap-2">
+                {Object.entries(byCarrier)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([carrier, count]) => (
+                    <RowStat
+                      key={carrier}
+                      label={carrier}
+                      value={`${count}`}
+                      meta={pct(count, total)}
+                    />
+                  ))}
+              </div>
+            )}
+          </Panel>
 
-          {/* By source */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-            <div className="text-sm font-semibold">Clicks by source</div>
-            <div className="mt-3 grid gap-2">
-              {Object.entries(bySource)
-                .sort((a, b) => b[1] - a[1])
-                .map(([source, count]) => (
-                  <RowStat
-                    key={source}
-                    label={source}
-                    value={`${count}`}
-                    meta={pct(count, total)}
-                  />
-                ))}
-              {total > 0 && otherClicks > 0 && (
-                <div className="text-xs text-gray-400 mt-2">
-                  Note: {otherClicks} clicks have source values outside the main three (results / cheapest_card / coverage_card).
-                </div>
-              )}
-              {Object.keys(bySource).length === 0 && (
-                <div className="text-sm text-gray-400">No clicks yet.</div>
-              )}
-            </div>
-          </div>
+          <Panel title="Clicks by source">
+            {Object.keys(bySource).length === 0 ? (
+              <div className="text-sm text-gray-400">No clicks yet.</div>
+            ) : (
+              <div className="grid gap-2">
+                {Object.entries(bySource)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([source, count]) => (
+                    <RowStat
+                      key={source}
+                      label={source}
+                      value={`${count}`}
+                      meta={pct(count, total)}
+                    />
+                  ))}
+              </div>
+            )}
+          </Panel>
         </div>
 
         {/* Table */}
@@ -164,24 +149,28 @@ export default async function ClicksPage() {
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Priority</th>
                 <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Current bill</th>
               </tr>
             </thead>
             <tbody>
-              {tableEvents.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-4 text-gray-400" colSpan={6}>
+                  <td className="px-4 py-4 text-gray-400" colSpan={7}>
                     No clicks recorded yet. Go to Results and press “Switch Now”.
                   </td>
                 </tr>
               ) : (
-                tableEvents.map((e, idx) => (
-                  <tr key={idx} className="border-t border-white/10">
-                    <td className="px-4 py-3 text-gray-300">{e.at}</td>
-                    <td className="px-4 py-3 font-semibold">{e.carrier}</td>
-                    <td className="px-4 py-3">{e.homeZip}</td>
-                    <td className="px-4 py-3">{e.dataTier}</td>
-                    <td className="px-4 py-3">{e.priority}</td>
-                    <td className="px-4 py-3 text-gray-300">{e.source || "unknown"}</td>
+                rows.map((r) => (
+                  <tr key={r.id} className="border-t border-white/10">
+                    <td className="px-4 py-3 text-gray-300">{r.created_at}</td>
+                    <td className="px-4 py-3 font-semibold">{r.carrier}</td>
+                    <td className="px-4 py-3">{r.home_zip ?? ""}</td>
+                    <td className="px-4 py-3">{r.data_tier ?? ""}</td>
+                    <td className="px-4 py-3">{r.priority ?? ""}</td>
+                    <td className="px-4 py-3 text-gray-300">{r.source ?? ""}</td>
+                    <td className="px-4 py-3 text-gray-300">
+                      {r.current_bill !== null ? `$${r.current_bill}` : ""}
+                    </td>
                   </tr>
                 ))
               )}
@@ -190,7 +179,7 @@ export default async function ClicksPage() {
         </div>
 
         <p className="mt-6 text-xs text-gray-400">
-          Stored locally in <code className="text-gray-200">data/clicks.jsonl</code>. For production we’ll move this to a database.
+          Dashboard is now production-ready (reads from Supabase).
         </p>
       </div>
     </main>
@@ -203,6 +192,15 @@ function StatCard({ title, value, sub }: { title: string; value: string; sub: st
       <div className="text-xs text-gray-400">{title}</div>
       <div className="mt-1 text-3xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-gray-400">{sub}</div>
+    </div>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="mt-3">{children}</div>
     </div>
   );
 }

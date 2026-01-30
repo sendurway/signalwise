@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "NEXT_DISABLE_TURBOPACK=1 next dev",
-
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.93.3",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
