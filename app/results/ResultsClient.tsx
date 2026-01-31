@@ -96,6 +96,18 @@ function MiniStat({ title, value }: { title: string; value: string }) {
   );
 }
 
+function confidenceLabel(score: number) {
+  if (score >= 90) return "Very High";
+  if (score >= 85) return "High";
+  return "Medium";
+}
+
+function confidenceBar(score: number) {
+  // map 70–95 → 0–100%
+  const pct = Math.round(((score - 70) / 25) * 100);
+  return Math.max(0, Math.min(100, pct));
+}
+
 export default function ResultsClient(props: {
   homeZip: string;
   dataTier: string;
@@ -108,6 +120,7 @@ export default function ResultsClient(props: {
   savings: number | null;
   labelForDataTier: string;
   labelForPriority: string;
+  confidence: number; // 70–95
 }) {
   const [showAlternatives, setShowAlternatives] = useState(false);
 
@@ -124,6 +137,9 @@ export default function ResultsClient(props: {
 
   const primaryCta =
     props.savings !== null ? `Switch & Save $${props.savings}/mo` : "Switch (Recommended)";
+
+  const barPct = confidenceBar(props.confidence);
+  const confText = confidenceLabel(props.confidence);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-gray-100">
@@ -173,8 +189,29 @@ export default function ResultsClient(props: {
                 </div>
               </div>
 
+              {/* Confidence meter */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-gray-200">
+                    Confidence: {confText}
+                  </div>
+                  <div className="text-xs text-gray-400">{props.confidence}/95</div>
+                </div>
+
+                <div className="mt-2 h-2 w-full rounded-full bg-black/40 border border-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-white/80"
+                    style={{ width: `${barPct}%` }}
+                  />
+                </div>
+
+                <div className="mt-2 text-[11px] text-gray-400">
+                  Based on ZIP + data fit + your priority.
+                </div>
+              </div>
+
               {/* Trust microcopy */}
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="text-xs font-semibold text-gray-200">Why this plan</div>
                 <ul className="mt-2 space-y-1 text-xs text-gray-300">
                   {whyThisPlan(props.bestMatch.slug).map((line) => (
@@ -185,10 +222,6 @@ export default function ResultsClient(props: {
                 <div className="mt-3 text-xs text-gray-300">
                   <span className="font-semibold text-gray-200">What you give up:</span>{" "}
                   {whatYouGiveUp(props.bestMatch.slug)}
-                </div>
-
-                <div className="mt-3 text-[11px] text-gray-400">
-                  Confidence: <span className="font-medium text-gray-300">High</span>
                 </div>
               </div>
 
@@ -262,6 +295,7 @@ function AltCard({
   item: Recommendation;
   href: string;
 }) {
+  const barPct = confidenceBar(82);
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-95">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
@@ -291,6 +325,10 @@ function AltCard({
 
         <div className="mt-3 text-[11px] text-gray-400">
           Confidence: <span className="font-medium text-gray-300">Medium</span>
+        </div>
+
+        <div className="mt-2 h-2 w-full rounded-full bg-black/40 border border-white/10 overflow-hidden">
+          <div className="h-full bg-white/60" style={{ width: `${barPct}%` }} />
         </div>
       </div>
 
