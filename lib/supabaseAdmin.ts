@@ -1,11 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 
 export function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // URL is not secret. We allow a safe fallback so production can't get "stuck"
+  // if Vercel fails to inject SUPABASE_URL.
+  const url =
+    process.env.SUPABASE_URL?.trim() ||
+    "https://ggeuibibctpwndampulx.supabase.co";
 
-  if (!url || !key) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!key) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
   }
 
   return createClient(url, key, {
