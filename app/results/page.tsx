@@ -1,5 +1,9 @@
+"use client";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+import { useMemo, useState } from "react";
 
 type CarrierSlug = "mint" | "visible" | "us-mobile";
 
@@ -8,7 +12,7 @@ type Recommendation = {
   network: string;
   price: string;
   reason: string;
-  slug: CarrierSlug; // IMPORTANT: always use slug so we go through /go/ for tracking
+  slug: CarrierSlug;
 };
 
 function getSimpleRecommendation(homeZip: string, dataTier: string, priority: string) {
@@ -38,7 +42,6 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     slug: "us-mobile",
   });
 
-  // LIGHT DATA
   if (dataTier === "light") {
     const cheapest = mint("$15/mo", "Cheapest option for light data users.");
     const coverage = visible("$25/mo", "Better coverage if signal reliability matters.");
@@ -50,7 +53,6 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     return { bestMatch, cheapest, bestCoverage: coverage };
   }
 
-  // UNLIMITED
   if (dataTier === "unlimited") {
     const cheapest = visible("$25/mo", "Lowest-cost unlimited option with a simple signup flow.");
     const coverage = visible("$45/mo", "Higher priority data in busy areas and strong Verizon coverage.");
@@ -65,7 +67,6 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     return { bestMatch, cheapest, bestCoverage: coverage };
   }
 
-  // DEFAULT (medium/heavy)
   const cheapest = mint("$15–20/mo", "Lower cost if you don’t need unlimited.");
   const coverage = visible("$45/mo", "Often stronger coverage + priority options.");
   const balanced = westCoast
@@ -104,7 +105,7 @@ function computeSavings(bestPrice: string, currentBill?: string) {
   return Math.max(0, current - best);
 }
 
-// This is the critical part: ALWAYS go through /go/... so Supabase logging runs.
+// ALWAYS route through /go/... so production logging works
 function goHref(
   slug: CarrierSlug,
   ctx: {
@@ -131,53 +132,60 @@ function whyThisPlan(slug: CarrierSlug) {
     return [
       "Uses T-Mobile towers nationwide",
       "Low monthly price with upfront savings",
-      "7-day trial + easy eSIM activation",
+      "Easy eSIM activation (device-dependent)",
     ];
   }
   if (slug === "visible") {
     return [
       "Runs on Verizon’s nationwide network",
-      "One flat monthly price (simple billing)",
-      "Unlimited data options + hotspot (plan-dependent)",
+      "Simple flat monthly pricing",
+      "Unlimited plan options (plan-dependent)",
     ];
   }
   return [
     "Choose Verizon or T-Mobile network options",
-    "Good balance of price + flexibility",
-    "eSIM support and easy plan switching",
+    "Flexible plans and add-ons",
+    "Good balance of price + control",
   ];
 }
 
-export default async function ResultsPage({
+function whatYouGiveUp(slug: CarrierSlug) {
+  if (slug === "mint") {
+    return "May slow down during congestion in busy areas (deprioritization).";
+  }
+  if (slug === "visible") {
+    return "Support is mostly online/chat (less in-store help).";
+  }
+  return "Plan details vary by network selection (double-check plan limits).";
+}
+
+export default function ResultsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
+  searchParams: {
     homeZip?: string;
     dataTier?: string;
     priority?: string;
     currentBill?: string;
     currentCarrier?: string;
-  }>;
+  };
 }) {
-  const sp = await searchParams;
+  const homeZip = (searchParams.homeZip ?? "").trim();
+  const dataTier = (searchParams.dataTier ?? "medium").trim();
+  const priority = (searchParams.priority ?? "balanced").trim();
 
-  const homeZip = (sp.homeZip ?? "").trim();
-  const dataTier = (sp.dataTier ?? "medium").trim();
-  const priority = (sp.priority ?? "balanced").trim();
+  const currentBill = (searchParams.currentBill ?? "").trim();
+  const currentCarrier = (searchParams.currentCarrier ?? "").trim();
 
-  const currentBill = (sp.currentBill ?? "").trim();
-  const currentCarrier = (sp.currentCarrier ?? "").trim();
+  const rec = useMemo(
+    () => getSimpleRecommendation(homeZip, dataTier, priority),
+    [homeZip, dataTier, priority]
+  );
 
-  const rec = getSimpleRecommendation(homeZip, dataTier, priority);
   const savings = computeSavings(rec.bestMatch.price, currentBill);
-
   const ctxBase = { homeZip, dataTier, priority, currentBill, currentCarrier };
 
-  const whyChosen = [
-    `Matches your data usage: ${labelForDataTier(dataTier)}`,
-    `Optimized for your priority: ${labelForPriority(priority)}`,
-    `Coverage estimate uses your ZIP: ${homeZip || "(missing)"}`,
-  ];
+  const [showAlternatives, setShowAlternatives] = useState(false);
 
   const primaryCta =
     savings !== null ? `Switch & Save $${savings}/mo` : "Switch (Recommended)";
@@ -237,16 +245,7 @@ export default async function ResultsPage({
 
               <p className="text-sm text-gray-200">{rec.bestMatch.reason}</p>
 
-              <div className="grid gap-2 text-sm text-gray-200">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  Why this was chosen
-                </div>
-                {whyChosen.map((w) => (
-                  <Bullet key={w} text={w} />
-                ))}
-              </div>
-
-              {/* Trust microcopy */}
+              {/* Trust blocks */}
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="text-xs font-semibold text-gray-200">Why this plan</div>
                 <ul className="mt-2 space-y-1 text-xs text-gray-300">
@@ -254,15 +253,20 @@ export default async function ResultsPage({
                     <li key={line}>• {line}</li>
                   ))}
                 </ul>
-                <div className="mt-2 text-[11px] text-gray-400">
+
+                <div className="mt-3 text-xs text-gray-300">
+                  <span className="font-semibold text-gray-200">What you give up:</span>{" "}
+                  {whatYouGiveUp(rec.bestMatch.slug)}
+                </div>
+
+                <div className="mt-3 text-[11px] text-gray-400">
                   Confidence: <span className="font-medium text-gray-300">High</span>
                 </div>
               </div>
 
-              <div className="mt-2 grid gap-2 text-xs text-gray-300 sm:grid-cols-3">
-                <MiniStat title="Keep your number" value="Yes" />
-                <MiniStat title="Time to switch" value="~10 min" />
-                <MiniStat title="Contract" value="No" />
+              {/* Reassurance line (above CTA) */}
+              <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-xs text-gray-300">
+                ✅ You keep your number • ✅ No contract • ✅ Switch takes ~10 minutes
               </div>
             </div>
 
@@ -283,27 +287,38 @@ export default async function ResultsPage({
               </a>
 
               <p className="mt-2 text-xs text-gray-500">Official carrier site</p>
-              <p className="mt-1 text-xs text-gray-500">Keep your number • ~10 min</p>
             </div>
+          </div>
+
+          {/* Reduce decision load: hide alternatives */}
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setShowAlternatives((v) => !v)}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-gray-200 hover:bg-white/10"
+            >
+              {showAlternatives ? "Hide alternatives" : "View cheapest & coverage alternatives"}
+            </button>
+
+            {showAlternatives && (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <SecondaryCard
+                  title="Cheapest Option"
+                  item={rec.cheapest}
+                  href={goHref(rec.cheapest.slug, { ...ctxBase, source: "cheapest_card" })}
+                />
+                <SecondaryCard
+                  title="Best Coverage (Estimate)"
+                  item={rec.bestCoverage}
+                  href={goHref(rec.bestCoverage.slug, { ...ctxBase, source: "coverage_card" })}
+                />
+              </div>
+            )}
           </div>
 
           <p className="mt-6 text-xs text-gray-400">
             Disclosure: We may earn a commission if you switch through our links. This does not affect recommendations.
           </p>
-        </div>
-
-        {/* Secondary */}
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <SecondaryCard
-            title="Cheapest Option"
-            item={rec.cheapest}
-            href={goHref(rec.cheapest.slug, { ...ctxBase, source: "cheapest_card" })}
-          />
-          <SecondaryCard
-            title="Best Coverage (Estimate)"
-            item={rec.bestCoverage}
-            href={goHref(rec.bestCoverage.slug, { ...ctxBase, source: "coverage_card" })}
-          />
         </div>
       </div>
     </main>
@@ -328,7 +343,7 @@ function SecondaryCard({
   href: string;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-90 hover:opacity-100 transition">
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-95">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
 
       <div className="mt-3 flex items-center gap-3">
@@ -341,7 +356,6 @@ function SecondaryCard({
 
       <p className="mt-3 text-sm text-gray-200">{item.reason}</p>
 
-      {/* Trust microcopy */}
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="text-xs font-semibold text-gray-200">Why this plan</div>
         <ul className="mt-2 space-y-1 text-xs text-gray-300">
@@ -349,7 +363,13 @@ function SecondaryCard({
             <li key={line}>• {line}</li>
           ))}
         </ul>
-        <div className="mt-2 text-[11px] text-gray-400">
+
+        <div className="mt-3 text-xs text-gray-300">
+          <span className="font-semibold text-gray-200">What you give up:</span>{" "}
+          {whatYouGiveUp(item.slug)}
+        </div>
+
+        <div className="mt-3 text-[11px] text-gray-400">
           Confidence: <span className="font-medium text-gray-300">Medium</span>
         </div>
       </div>
@@ -380,24 +400,6 @@ function LogoDot({ label }: { label: string }) {
   return (
     <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-black/40 text-xs font-bold text-gray-200">
       {label}
-    </div>
-  );
-}
-
-function Bullet({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="mt-1 h-2 w-2 rounded-full bg-white/60" />
-      <span>{text}</span>
-    </div>
-  );
-}
-
-function MiniStat({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-gray-400">{title}</div>
-      <div className="mt-1 text-sm font-semibold text-gray-100">{value}</div>
     </div>
   );
 }
