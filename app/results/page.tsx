@@ -1,18 +1,19 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type CarrierSlug = "mint" | "visible" | "us-mobile";
+
 type Recommendation = {
   name: string;
   network: string;
   price: string;
   reason: string;
-  slug: "mint" | "visible" | "us-mobile"; // IMPORTANT: use slug, not direct URL
+  slug: CarrierSlug; // IMPORTANT: always use slug so we go through /go/ for tracking
 };
 
 function getSimpleRecommendation(homeZip: string, dataTier: string, priority: string) {
   const westCoast = homeZip.startsWith("9");
 
-  // Helper to build recommendation objects
   const mint = (price: string, reason: string): Recommendation => ({
     name: "Mint Mobile",
     network: "T-Mobile",
@@ -37,6 +38,7 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     slug: "us-mobile",
   });
 
+  // LIGHT DATA
   if (dataTier === "light") {
     const cheapest = mint("$15/mo", "Cheapest option for light data users.");
     const coverage = visible("$25/mo", "Better coverage if signal reliability matters.");
@@ -48,9 +50,11 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     return { bestMatch, cheapest, bestCoverage: coverage };
   }
 
+  // UNLIMITED
   if (dataTier === "unlimited") {
     const cheapest = visible("$25/mo", "Lowest-cost unlimited option with a simple signup flow.");
     const coverage = visible("$45/mo", "Higher priority data in busy areas and strong Verizon coverage.");
+
     const balanced = westCoast
       ? mint("$30/mo", "Unlimited data at a strong value for your region.")
       : visible("$25/mo", "Unlimited data at a strong value for your region.");
@@ -61,6 +65,7 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     return { bestMatch, cheapest, bestCoverage: coverage };
   }
 
+  // DEFAULT (medium/heavy)
   const cheapest = mint("$15–20/mo", "Lower cost if you don’t need unlimited.");
   const coverage = visible("$45/mo", "Often stronger coverage + priority options.");
   const balanced = westCoast
@@ -99,9 +104,9 @@ function computeSavings(bestPrice: string, currentBill?: string) {
   return Math.max(0, current - best);
 }
 
-// IMPORTANT: Build the tracked /go URL (this is what makes Supabase clicks work)
+// This is the critical part: ALWAYS go through /go/... so Supabase logging runs.
 function goHref(
-  slug: string,
+  slug: CarrierSlug,
   ctx: {
     homeZip: string;
     dataTier: string;
@@ -119,6 +124,28 @@ function goHref(
   if (ctx.currentBill) qs.set("currentBill", ctx.currentBill);
   if (ctx.currentCarrier) qs.set("currentCarrier", ctx.currentCarrier);
   return `/go/${slug}?${qs.toString()}`;
+}
+
+function whyThisPlan(slug: CarrierSlug) {
+  if (slug === "mint") {
+    return [
+      "Uses T-Mobile towers nationwide",
+      "Low monthly price with upfront savings",
+      "7-day trial + easy eSIM activation",
+    ];
+  }
+  if (slug === "visible") {
+    return [
+      "Runs on Verizon’s nationwide network",
+      "One flat monthly price (simple billing)",
+      "Unlimited data options + hotspot (plan-dependent)",
+    ];
+  }
+  return [
+    "Choose Verizon or T-Mobile network options",
+    "Good balance of price + flexibility",
+    "eSIM support and easy plan switching",
+  ];
 }
 
 export default async function ResultsPage({
@@ -146,10 +173,10 @@ export default async function ResultsPage({
 
   const ctxBase = { homeZip, dataTier, priority, currentBill, currentCarrier };
 
-  const why = [
+  const whyChosen = [
     `Matches your data usage: ${labelForDataTier(dataTier)}`,
     `Optimized for your priority: ${labelForPriority(priority)}`,
-    `Network fit for your ZIP: ${homeZip || "(missing)"}`,
+    `Coverage estimate uses your ZIP: ${homeZip || "(missing)"}`,
   ];
 
   const primaryCta =
@@ -158,6 +185,7 @@ export default async function ResultsPage({
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-gray-100">
       <div className="mx-auto max-w-4xl px-6 py-12">
+        {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-gray-200">
@@ -207,13 +235,28 @@ export default async function ResultsPage({
                 </div>
               </div>
 
+              <p className="text-sm text-gray-200">{rec.bestMatch.reason}</p>
+
               <div className="grid gap-2 text-sm text-gray-200">
                 <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Why this was chosen
                 </div>
-                {why.map((w) => (
+                {whyChosen.map((w) => (
                   <Bullet key={w} text={w} />
                 ))}
+              </div>
+
+              {/* Trust microcopy */}
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs font-semibold text-gray-200">Why this plan</div>
+                <ul className="mt-2 space-y-1 text-xs text-gray-300">
+                  {whyThisPlan(rec.bestMatch.slug).map((line) => (
+                    <li key={line}>• {line}</li>
+                  ))}
+                </ul>
+                <div className="mt-2 text-[11px] text-gray-400">
+                  Confidence: <span className="font-medium text-gray-300">High</span>
+                </div>
               </div>
 
               <div className="mt-2 grid gap-2 text-xs text-gray-300 sm:grid-cols-3">
@@ -287,6 +330,7 @@ function SecondaryCard({
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-90 hover:opacity-100 transition">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
+
       <div className="mt-3 flex items-center gap-3">
         <LogoDot label={initials(item.name)} />
         <div>
@@ -296,6 +340,19 @@ function SecondaryCard({
       </div>
 
       <p className="mt-3 text-sm text-gray-200">{item.reason}</p>
+
+      {/* Trust microcopy */}
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="text-xs font-semibold text-gray-200">Why this plan</div>
+        <ul className="mt-2 space-y-1 text-xs text-gray-300">
+          {whyThisPlan(item.slug).map((line) => (
+            <li key={line}>• {line}</li>
+          ))}
+        </ul>
+        <div className="mt-2 text-[11px] text-gray-400">
+          Confidence: <span className="font-medium text-gray-300">Medium</span>
+        </div>
+      </div>
 
       <a
         href={href}
