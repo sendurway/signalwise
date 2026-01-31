@@ -1,17 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type DataTier = "light" | "medium" | "heavy" | "unlimited";
 type Priority = "cheapest" | "balanced" | "coverage";
 
-const isDataTier = (x: string): x is DataTier =>
-  x === "light" || x === "medium" || x === "heavy" || x === "unlimited";
-
 export default function StartPage() {
   const router = useRouter();
-  const sp = useSearchParams();
 
   const [homeZip, setHomeZip] = useState("");
   const [dataTier, setDataTier] = useState<DataTier>("medium");
@@ -19,21 +15,6 @@ export default function StartPage() {
 
   const [currentCarrier, setCurrentCarrier] = useState("");
   const [currentBill, setCurrentBill] = useState("");
-
-  // Prefill when returning from Results
-  useEffect(() => {
-    const zip = sp.get("homeZip");
-    const tier = sp.get("dataTier");
-    const pr = sp.get("priority");
-    const cc = sp.get("currentCarrier");
-    const cb = sp.get("currentBill");
-
-    if (zip) setHomeZip(zip);
-    if (tier && isDataTier(tier)) setDataTier(tier);
-    if (pr === "cheapest" || pr === "balanced" || pr === "coverage") setPriority(pr);
-    if (cc) setCurrentCarrier(cc);
-    if (cb) setCurrentBill(cb);
-  }, [sp]);
 
   function goToResults() {
     const zip = homeZip.trim();
@@ -43,6 +24,7 @@ export default function StartPage() {
     qs.set("homeZip", zip);
     qs.set("dataTier", dataTier);
     qs.set("priority", priority);
+
     if (currentCarrier.trim()) qs.set("currentCarrier", currentCarrier.trim());
     if (currentBill.trim()) qs.set("currentBill", currentBill.trim());
 
@@ -122,7 +104,6 @@ export default function StartPage() {
               Answer a few questions. We’ll show a best match + real monthly savings.
             </p>
 
-            {/* Transparency microcopy */}
             <p className="text-xs text-gray-400">
               Recommendations are generated from your inputs and known carrier characteristics. We don’t accept paid placement.
             </p>
@@ -197,7 +178,6 @@ export default function StartPage() {
 
           {/* Right: Data + Priority */}
           <div className="space-y-6">
-            {/* Data card */}
             <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-200">3) How much data?</h2>
@@ -216,7 +196,6 @@ export default function StartPage() {
               </p>
             </div>
 
-            {/* Priority card */}
             <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-200">4) What matters most?</h2>
