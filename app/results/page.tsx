@@ -6,36 +6,41 @@ type Recommendation = {
   network: string;
   price: string;
   reason: string;
-  link: string;
+  slug: "mint" | "visible" | "us-mobile"; // IMPORTANT: use slug, not direct URL
 };
 
 function getSimpleRecommendation(homeZip: string, dataTier: string, priority: string) {
   const westCoast = homeZip.startsWith("9");
 
+  // Helper to build recommendation objects
+  const mint = (price: string, reason: string): Recommendation => ({
+    name: "Mint Mobile",
+    network: "T-Mobile",
+    price,
+    reason,
+    slug: "mint",
+  });
+
+  const visible = (price: string, reason: string): Recommendation => ({
+    name: "Visible",
+    network: "Verizon",
+    price,
+    reason,
+    slug: "visible",
+  });
+
+  const usm = (price: string, reason: string): Recommendation => ({
+    name: "US Mobile",
+    network: "Verizon/T-Mobile",
+    price,
+    reason,
+    slug: "us-mobile",
+  });
+
   if (dataTier === "light") {
-    const cheapest: Recommendation = {
-      name: "Mint Mobile",
-      network: "T-Mobile",
-      price: "$15/mo",
-      reason: "Cheapest option for light data users.",
-      link: "/go/mint",
-    };
-
-    const coverage: Recommendation = {
-      name: "Visible",
-      network: "Verizon",
-      price: "$25/mo",
-      reason: "Better coverage if signal reliability matters.",
-      link: "/go/visible",
-    };
-
-    const balanced: Recommendation = {
-      name: "Mint Mobile",
-      network: "T-Mobile",
-      price: "$15/mo",
-      reason: "Strong value for light usage with simple pricing.",
-      link: "/go/mint",
-    };
+    const cheapest = mint("$15/mo", "Cheapest option for light data users.");
+    const coverage = visible("$25/mo", "Better coverage if signal reliability matters.");
+    const balanced = mint("$15/mo", "Strong value for light usage with simple pricing.");
 
     const bestMatch =
       priority === "cheapest" ? cheapest : priority === "coverage" ? coverage : balanced;
@@ -44,29 +49,11 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
   }
 
   if (dataTier === "unlimited") {
-    const cheapest: Recommendation = {
-      name: "Visible",
-      network: "Verizon",
-      price: "$25/mo",
-      reason: "Lowest-cost unlimited option with a simple signup flow.",
-      link: "/go/visible",
-    };
-
-    const coverage: Recommendation = {
-      name: "Visible Plus",
-      network: "Verizon",
-      price: "$45/mo",
-      reason: "Higher priority data in busy areas and strong Verizon coverage.",
-      link: "/go/visible",
-    };
-
-    const balanced: Recommendation = {
-      name: westCoast ? "Mint Mobile" : "Visible",
-      network: westCoast ? "T-Mobile" : "Verizon",
-      price: westCoast ? "$30/mo" : "$25/mo",
-      reason: "Unlimited data at a strong value for your region.",
-      link: westCoast ? "/go/mint" : "/go/visible",
-    };
+    const cheapest = visible("$25/mo", "Lowest-cost unlimited option with a simple signup flow.");
+    const coverage = visible("$45/mo", "Higher priority data in busy areas and strong Verizon coverage.");
+    const balanced = westCoast
+      ? mint("$30/mo", "Unlimited data at a strong value for your region.")
+      : visible("$25/mo", "Unlimited data at a strong value for your region.");
 
     const bestMatch =
       priority === "cheapest" ? cheapest : priority === "coverage" ? coverage : balanced;
@@ -74,55 +61,16 @@ function getSimpleRecommendation(homeZip: string, dataTier: string, priority: st
     return { bestMatch, cheapest, bestCoverage: coverage };
   }
 
-  const cheapest: Recommendation = {
-    name: "Mint Mobile",
-    network: "T-Mobile",
-    price: "$15–20/mo",
-    reason: "Lower cost if you don’t need unlimited.",
-    link: "/go/mint",
-  };
-
-  const coverage: Recommendation = {
-    name: "Visible",
-    network: "Verizon",
-    price: "$45/mo",
-    reason: "Often stronger coverage + priority options.",
-    link: "/go/visible",
-  };
-
-  const balanced: Recommendation = {
-    name: westCoast ? "Mint Mobile" : "Visible",
-    network: westCoast ? "T-Mobile" : "Verizon",
-    price: "$25–30/mo",
-    reason: "Balanced option for most users in your area.",
-    link: westCoast ? "/go/mint" : "/go/visible",
-  };
+  const cheapest = mint("$15–20/mo", "Lower cost if you don’t need unlimited.");
+  const coverage = visible("$45/mo", "Often stronger coverage + priority options.");
+  const balanced = westCoast
+    ? mint("$25–30/mo", "Balanced option for most users in your area.")
+    : visible("$25–30/mo", "Balanced option for most users in your area.");
 
   const bestMatch =
     priority === "cheapest" ? cheapest : priority === "coverage" ? coverage : balanced;
 
   return { bestMatch, cheapest, bestCoverage: coverage };
-}
-
-function withTracking(
-  baseLink: string,
-  ctx: {
-    homeZip: string;
-    dataTier: string;
-    priority: string;
-    source: string;
-    currentBill?: string;
-    currentCarrier?: string;
-  }
-) {
-  const qs = new URLSearchParams();
-  qs.set("homeZip", ctx.homeZip);
-  qs.set("dataTier", ctx.dataTier);
-  qs.set("priority", ctx.priority);
-  qs.set("source", ctx.source);
-  if (ctx.currentBill) qs.set("currentBill", ctx.currentBill);
-  if (ctx.currentCarrier) qs.set("currentCarrier", ctx.currentCarrier);
-  return `${baseLink}?${qs.toString()}`;
 }
 
 function labelForDataTier(t: string) {
@@ -149,6 +97,28 @@ function computeSavings(bestPrice: string, currentBill?: string) {
   if (!best || !Number.isFinite(best)) return null;
 
   return Math.max(0, current - best);
+}
+
+// IMPORTANT: Build the tracked /go URL (this is what makes Supabase clicks work)
+function goHref(
+  slug: string,
+  ctx: {
+    homeZip: string;
+    dataTier: string;
+    priority: string;
+    source: string;
+    currentBill?: string;
+    currentCarrier?: string;
+  }
+) {
+  const qs = new URLSearchParams();
+  qs.set("homeZip", ctx.homeZip);
+  qs.set("dataTier", ctx.dataTier);
+  qs.set("priority", ctx.priority);
+  qs.set("source", ctx.source);
+  if (ctx.currentBill) qs.set("currentBill", ctx.currentBill);
+  if (ctx.currentCarrier) qs.set("currentCarrier", ctx.currentCarrier);
+  return `/go/${slug}?${qs.toString()}`;
 }
 
 export default async function ResultsPage({
@@ -188,7 +158,6 @@ export default async function ResultsPage({
   return (
     <main className="min-h-screen bg-gradient-to-b from-black via-zinc-950 to-black text-gray-100">
       <div className="mx-auto max-w-4xl px-6 py-12">
-        {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-gray-200">
@@ -238,8 +207,6 @@ export default async function ResultsPage({
                 </div>
               </div>
 
-              <p className="text-sm text-gray-200">{rec.bestMatch.reason}</p>
-
               <div className="grid gap-2 text-sm text-gray-200">
                 <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">
                   Why this was chosen
@@ -266,7 +233,7 @@ export default async function ResultsPage({
               </p>
 
               <a
-                href={withTracking(rec.bestMatch.link, { ...ctxBase, source: "results" })}
+                href={goHref(rec.bestMatch.slug, { ...ctxBase, source: "results" })}
                 className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black hover:opacity-90"
               >
                 {primaryCta}
@@ -282,32 +249,17 @@ export default async function ResultsPage({
           </p>
         </div>
 
-        {/* SECONDARY (de-emphasized) */}
+        {/* Secondary */}
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <ResultCard
-            tone="secondary"
+          <SecondaryCard
             title="Cheapest Option"
-            subtitle="Lowest monthly cost for your selection"
             item={rec.cheapest}
-            bullets={[
-              "Best if you want to minimize your bill",
-              "Simple signup and pricing",
-              "May deprioritize under congestion (varies)",
-            ]}
-            href={withTracking(rec.cheapest.link, { ...ctxBase, source: "cheapest_card" })}
+            href={goHref(rec.cheapest.slug, { ...ctxBase, source: "cheapest_card" })}
           />
-
-          <ResultCard
-            tone="secondary"
+          <SecondaryCard
             title="Best Coverage (Estimate)"
-            subtitle="Reliability-first recommendation"
             item={rec.bestCoverage}
-            bullets={[
-              "Better fit if signal reliability matters most",
-              "Coverage estimate (MVP rules for now)",
-              "We’ll upgrade this with real coverage data",
-            ]}
-            href={withTracking(rec.bestCoverage.link, { ...ctxBase, source: "coverage_card" })}
+            href={goHref(rec.bestCoverage.slug, { ...ctxBase, source: "coverage_card" })}
           />
         </div>
       </div>
@@ -323,53 +275,27 @@ function Badge({ label }: { label: string }) {
   );
 }
 
-function ResultCard({
+function SecondaryCard({
   title,
-  subtitle,
   item,
-  bullets,
   href,
-  tone,
 }: {
   title: string;
-  subtitle: string;
   item: Recommendation;
-  bullets: string[];
   href: string;
-  tone: "secondary";
 }) {
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur opacity-90 hover:opacity-100 transition">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
-          <p className="text-sm text-gray-300">{subtitle}</p>
-
-          <div className="mt-3 flex items-center gap-3">
-            <LogoDot label={initials(item.name)} />
-            <div>
-              <h3 className="text-lg font-semibold">{item.name}</h3>
-              <p className="text-xs text-gray-400">Network: {item.network}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-xs text-gray-400">Est. monthly</p>
-          <p className="text-xl font-semibold">{item.price}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
+      <div className="mt-3 flex items-center gap-3">
+        <LogoDot label={initials(item.name)} />
+        <div>
+          <h3 className="text-lg font-semibold">{item.name}</h3>
+          <p className="text-xs text-gray-400">Network: {item.network}</p>
         </div>
       </div>
 
       <p className="mt-3 text-sm text-gray-200">{item.reason}</p>
-
-      <ul className="mt-4 space-y-2 text-sm text-gray-200">
-        {bullets.map((b) => (
-          <li key={b} className="flex items-start gap-2">
-            <span className="mt-1 h-2 w-2 rounded-full bg-white/60" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
 
       <a
         href={href}
