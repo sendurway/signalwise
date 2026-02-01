@@ -3,6 +3,7 @@ import "./globals.css";
 export const metadata = {
   other: {
     "impact-site-verification": "594589f7-ba8c-43d6-8bca-2b6342305891",
+    "impact_site_verification": "594589f7-ba8c-43d6-8bca-2b6342305891",
   },
 };
 
